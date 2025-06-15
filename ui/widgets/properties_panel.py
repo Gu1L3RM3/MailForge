@@ -32,8 +32,17 @@ class PropertiesPanel(QWidget):
         # Página 1: Propriedades de Texto
         self.text_props = QWidget()
         self.text_layout = QFormLayout(self.text_props)
-        self.text_content_edit = QLineEdit() # Simplificado, ideal seria um editor rico
-        self.text_content_edit.textChanged.connect(lambda t: self.emit_change("text", t))
+        
+        # Substituir QLineEdit por QTextEdit para permitir expansão automática
+        from PySide6.QtWidgets import QTextEdit
+        self.text_content_edit = QTextEdit()
+        self.text_content_edit.setMinimumHeight(80)
+        self.text_content_edit.setAcceptRichText(False)
+        self.text_content_edit.textChanged.connect(lambda: self.emit_change("text", self.text_content_edit.toPlainText()))
+        
+        # Configurar para expandir automaticamente
+        self.text_content_edit.document().contentsChanged.connect(self.adjust_text_edit_height)
+        
         self.text_layout.addRow("Conteúdo:", self.text_content_edit)
         
         # Adicionar opções de alinhamento
@@ -41,14 +50,17 @@ class PropertiesPanel(QWidget):
         self.text_align_left = QPushButton("Esquerda")
         self.text_align_center = QPushButton("Centro")
         self.text_align_right = QPushButton("Direita")
+        self.text_align_justify = QPushButton("Justificado")
         
         self.text_align_left.clicked.connect(lambda: self.emit_change("align", "left"))
         self.text_align_center.clicked.connect(lambda: self.emit_change("align", "center"))
         self.text_align_right.clicked.connect(lambda: self.emit_change("align", "right"))
+        self.text_align_justify.clicked.connect(lambda: self.emit_change("align", "justify"))
         
         self.text_align_layout.addWidget(self.text_align_left)
         self.text_align_layout.addWidget(self.text_align_center)
         self.text_align_layout.addWidget(self.text_align_right)
+        self.text_align_layout.addWidget(self.text_align_justify)
         
         # Adicionar botão de cor do texto
         self.text_color_btn = QPushButton("Cor do Texto")
@@ -442,6 +454,7 @@ class PropertiesPanel(QWidget):
             self.text_align_left.setStyleSheet("font-weight: normal;")
             self.text_align_center.setStyleSheet("font-weight: normal;")
             self.text_align_right.setStyleSheet("font-weight: normal;")
+            self.text_align_justify.setStyleSheet("font-weight: normal;")
             
             if align == 'left':
                 self.text_align_left.setStyleSheet("font-weight: bold;")
@@ -449,6 +462,8 @@ class PropertiesPanel(QWidget):
                 self.text_align_center.setStyleSheet("font-weight: bold;")
             elif align == 'right':
                 self.text_align_right.setStyleSheet("font-weight: bold;")
+            elif align == 'justify':
+                self.text_align_justify.setStyleSheet("font-weight: bold;")
                 
             # Atualizar tamanho da fonte
             font_size = props.get('fontSize', '16px')
@@ -666,3 +681,36 @@ class PropertiesPanel(QWidget):
             # Move o cursor para entre as tags
             cursor.movePosition(cursor.Left, cursor.MoveAnchor, len(closing_tag))
             self.html_content_edit.setTextCursor(cursor)
+            
+    def adjust_text_edit_height(self):
+        # Ajusta a altura do QTextEdit conforme o conteúdo
+        document = self.text_content_edit.document()
+        margins = self.text_content_edit.contentsMargins()
+        doc_height = document.size().height() + margins.top() + margins.bottom() + 10  # Adiciona um pouco de espaço extra
+        
+        # Define uma altura mínima e máxima para o QTextEdit
+        min_height = 80
+        max_height = 300
+        
+        # Ajusta a altura dentro dos limites
+        new_height = max(min_height, min(doc_height, max_height))
+        self.text_content_edit.setMinimumHeight(new_height)
+        from PySide6.QtCore import QSize
+        
+        # Obter o tamanho do documento
+        document = self.text_content_edit.document()
+        document_size = document.size().toSize()
+        
+        # Calcular a altura necessária (altura do documento + margens)
+        margins = self.text_content_edit.contentsMargins()
+        height = document_size.height() + margins.top() + margins.bottom() + 10  # 10px extra para evitar barra de rolagem
+        
+        # Definir altura mínima e máxima
+        min_height = 80
+        max_height = 300
+        
+        # Ajustar a altura dentro dos limites
+        new_height = max(min_height, min(height, max_height))
+        
+        # Aplicar a nova altura
+        self.text_content_edit.setMinimumHeight(new_height)

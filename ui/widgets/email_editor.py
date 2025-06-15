@@ -256,6 +256,10 @@ class EmailEditor(QWebEngineView):
                 }} else {{
                     // Para outros elementos (como texto), aplicamos diretamente
                     el.style.textAlign = "{value}";
+                    // Se for justificado, também ajustamos a largura para 100% para evitar que o texto saia do bloco
+                    if ("{value}" === "justify") {{
+                        el.style.width = "100%";
+                    }}
                 }}
             '''
         elif prop == "textColor":
