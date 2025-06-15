@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #ffffff;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        #drop-zone {
+            min-height: 80vh;
+            border: 2px dashed #ccc;
+            padding: 20px;
+            transition: background-color 0.2s;
+        }
+        #drop-zone.drag-over {
+            background-color: #e0f7ff;
+            border-color: #3498db;
+        }
+        .editable-component {
+            cursor: pointer;
+            border: 2px solid transparent;
+            padding: 5px;
+            margin-bottom: 10px;
+            transition: border-color 0.2s;
+        }
+        .editable-component.selected {
+            border: 2px solid #3498db;
+            box-shadow: 0 0 5px rgba(52, 152, 219, 0.5);
+        }
+        /* Responsividade básica para imagens */
+        img { max-width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+
+    <div id="drop-zone">
+        <!-- Componentes serão inseridos aqui -->
+    </div>
+
+    <script>
+        let pyBridge;
+        let selectedComponent = null;
+
+        new QWebChannel(qt.webChannelTransport, function (channel) {
+            pyBridge = channel.objects.pyBridge;
+            
+            // Registrar handler para atualização de cor de fundo
+            pyBridge.property_changed.connect(function(componentId, propertyName, value) {
+                if (propertyName === 'bgColor' && !componentId) {
+                    updateBackgroundColor(value);
+                }
+            });
+        });
+
+        // Definir variáveis globais
+        const dropZone = document.getElementById('drop-zone');
+        
+        // Destacar área de drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+        });
+        
+        // Função para atualizar a cor de fundo
+        function updateBackgroundColor(color) {
+            document.getElementById('drop-zone').style.backgroundColor = color;
+        }
+
+        // Lógica de seleção de componente
+        document.body.addEventListener('click', function(e) {
+            // Se o clique foi fora da drop-zone, deselecione
+            if (!dropZone.contains(e.target)) {
+                 if (selectedComponent) {
+                    selectedComponent.classList.remove('selected');
+                    selectedComponent = null;
+                    pyBridge.on_component_deselected();
+                }
+                return;
+            }
+            
+            const component = e.target.closest('.editable-component');
+            
+            if (selectedComponent) {
+                selectedComponent.classList.remove('selected');
+            }
+
+            if (component) {
+                component.classList.add('selected');
+                selectedComponent = component;
+
+                // Coleta todas as propriedades relevantes
+                const props = {
+                    id: component.dataset.id,
+                    type: component.dataset.type,
+                    align: component.style.textAlign || 'left'
+                };
+                if (props.type === 'text') {
+                    props.text = component.innerHTML;
+                    props.color = component.style.color || '#333';
+                    props.fontSize = component.style.fontSize || '16px';
+                } else if (props.type === 'image') {
+                    props.src = component.src;
+                    props.alt = component.alt;
+                    props.align = component.style.textAlign || 'left';
+                    
+                    // Adicionar evento de duplo clique para imagens
+                    if (!component.hasAttribute('data-dblclick-initialized')) {
+                        component.addEventListener('dblclick', function() {
+                            pyBridge.on_request_image_upload(component.dataset.id);
+                        });
+                        component.setAttribute('data-dblclick-initialized', 'true');
+                    }
+                } else if (props.type === 'button') {
+                    props.text = component.innerText;
+                    props.href = component.href;
+                    props.bgColor = component.style.backgroundColor;
+                    props.textColor = component.style.color || '#ffffff';
+                    props.fontSize = component.style.fontSize || '16px';
+                } else if (props.type === 'spacer') {
+                    props.height = component.style.height;
+                } else if (props.type === 'divider') {
+                    props.borderStyle = component.style.borderTopStyle || 'solid';
+                    props.borderColor = component.style.borderTopColor || '#ccc';
+                } else if (props.type === 'two-columns' || props.type === 'three-columns') {
+                    props.gap = component.style.gap || '20px';
+                } else if (props.type === 'social') {
+                    // Obter o tamanho dos ícones de imagem
+                    const img = component.querySelector('img');
+                    if (img) {
+                        props.iconSize = img.getAttribute('width') || '32px';
+                    }
+                    props.align = component.style.textAlign || 'center';
+                } else if (props.type === 'video') {
+                    const thumbnail = component.querySelector('.video-thumbnail');
+                    if (thumbnail) {
+                        props.thumbnailUrl = thumbnail.src;
+                        props.videoUrl = thumbnail.getAttribute('data-video-url') || '';
+                    }
+                } else if (props.type === 'html') {
+                    const contentDiv = component.querySelector('div');
+                    if (contentDiv) {
+                        props.htmlContent = contentDiv.innerHTML;
+                    }
+                }
+
+                pyBridge.on_component_selected(JSON.stringify(props));
+
+            } else {
+                 if (selectedComponent) {
+                    selectedComponent.classList.remove('selected');
+                    selectedComponent = null;
+                    pyBridge.on_component_deselected();
+                }
+            }
+            e.stopPropagation();
+        });
+        
+        // Função para excluir componente selecionado
+        function deleteSelectedComponent() {
+            if (selectedComponent) {
+                selectedComponent.remove();
+                selectedComponent = null;
+                pyBridge.on_component_deselected();
+            }
+        }
+        
+        // Função para mover o componente selecionado para cima
+        function moveSelectedComponentUp() {
+            if (selectedComponent) {
+                const parent = selectedComponent.parentNode;
+                const prev = selectedComponent.previousElementSibling;
+                if (prev) {
+                    parent.insertBefore(selectedComponent, prev);
+                }
+            }
+        }
+        
+        // Função para mover o componente selecionado para baixo
+        function moveSelectedComponentDown() {
+            if (selectedComponent) {
+                const parent = selectedComponent.parentNode;
+                const next = selectedComponent.nextElementSibling;
+                if (next) {
+                    parent.insertBefore(next, selectedComponent);
+                }
+            }
+        }
+        
+        // Adicionar listener de teclado para excluir com Delete ou Backspace
+        document.addEventListener('keydown', function(e) {
+            if ((e.key === 'Delete' || e.key === 'Backspace') && selectedComponent) {
+                deleteSelectedComponent();
+                e.preventDefault();
+            }
+        });
+        
+        // Destacar área de drop
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('drag-over');
+        });
+
+        dropZone.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('drag-over');
+        });
+
+        // Lógica para permitir arrastar componentes para dentro de colunas
+        document.addEventListener('DOMContentLoaded', function() {
+            setupDropColumns();
+        });
+        
+        // Função para configurar as colunas como áreas de drop
+        function setupDropColumns() {
+            const columns = document.querySelectorAll('.drop-column');
+            columns.forEach(column => {
+                setupDropZone(column);
+            });
+        }
+        
+        // Configurar uma área como zona de drop
+        function setupDropZone(element) {
+            element.addEventListener('dragover', function(e) {
+                e.preventDefault();
+                this.style.backgroundColor = '#e0f7ff';
+                this.style.borderColor = '#3498db';
+            });
+            
+            element.addEventListener('dragleave', function(e) {
+                e.preventDefault();
+                this.style.backgroundColor = '';
+                this.style.borderColor = '#ccc';
+            });
+            
+            element.addEventListener('drop', function(e) {
+                e.preventDefault();
+                this.style.backgroundColor = '';
+                this.style.borderColor = '#ccc';
+                
+                // Remover o texto placeholder se existir
+                const placeholder = this.querySelector('.placeholder-text');
+                if (placeholder) {
+                    placeholder.remove();
+                }
+            });
+        }
+        
+        // Observer para configurar novas colunas adicionadas dinamicamente
+        const observer = new MutationObserver(function(mutations) {
+            mutations.forEach(function(mutation) {
+                if (mutation.addedNodes.length) {
+                    mutation.addedNodes.forEach(function(node) {
+                        if (node.nodeType === 1) { // Elemento
+                            // Verificar se o nó adicionado contém colunas
+                            const columns = node.querySelectorAll('.drop-column');
+                            columns.forEach(column => {
+                                setupDropZone(column);
+                            });
+                        }
+                    });
+                }
+            });
+        });
+        
+        observer.observe(dropZone, { childList: true, subtree: true });
+        
+    </script>
+</body>
+</html>
