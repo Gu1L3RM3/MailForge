@@ -72,6 +72,7 @@ class MainWindow(QMainWindow):
         Usa BeautifulSoup para limpar o HTML do editor, preparando-o para envio.
         - Remove wrappers de componentes HTML.
         - Remove classes e atributos de dados específicos do editor.
+        - Remove bordas pontilhadas dos componentes de rows e columns.
         """
         soup = BeautifulSoup(raw_html, 'html.parser')
 
@@ -82,11 +83,20 @@ class MainWindow(QMainWindow):
             if inner_content:
                 html_component.replace_with(BeautifulSoup(inner_content.decode_contents(), 'html.parser'))
 
-        # 2. Remove classes e atributos de dados do editor de todos os elementos
+        # 2. Remove bordas pontilhadas dos componentes de rows e columns
+        for column in soup.find_all(class_="drop-column"):
+            if 'style' in column.attrs:
+                # Remove a borda pontilhada do estilo
+                style = column['style']
+                style = style.replace('border: 1px dashed #ccc;', '')
+                style = style.replace('border: 1px dashed #ccc', '')
+                column['style'] = style
+
+        # 3. Remove classes e atributos de dados do editor de todos os elementos
         for tag in soup.find_all(True):
             if 'class' in tag.attrs:
-                # Remove a classe 'editable-component' e 'selected'
-                tag['class'] = [c for c in tag['class'] if c not in ['editable-component', 'selected']]
+                # Remove a classe 'editable-component', 'selected' e 'drop-column'
+                tag['class'] = [c for c in tag['class'] if c not in ['editable-component', 'selected', 'drop-column', 'placeholder-text']]
                 if not tag['class']:
                     del tag['class'] # Remove o atributo se a lista de classes estiver vazia
             

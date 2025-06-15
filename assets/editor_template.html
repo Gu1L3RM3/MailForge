@@ -26,7 +26,7 @@
             border: 2px solid transparent;
             padding: 5px;
             margin-bottom: 10px;
-            transition: border-color 0.2s;
+            transition: border-color 0.2s, border-radius 0.2s, background-color 0.2s;
             word-wrap: break-word;
             overflow-wrap: break-word;
             word-break: break-word;
@@ -112,7 +112,16 @@
                 const props = {
                     id: component.dataset.id,
                     type: component.dataset.type,
-                    align: component.style.textAlign || 'left'
+                    align: component.style.textAlign || 'left',
+                    // Coletar propriedades de bordas arredondadas
+                    borderRadius: component.style.borderRadius || '0px',
+                    borderRadiusTopLeft: component.style.borderTopLeftRadius || '',
+                    borderRadiusTopRight: component.style.borderTopRightRadius || '',
+                    borderRadiusBottomLeft: component.style.borderBottomLeftRadius || '',
+                    borderRadiusBottomRight: component.style.borderBottomRightRadius || '',
+                    // Coletar propriedades de tamanho para todos os componentes
+                    width: component.style.width || '',
+                    height: component.style.height || ''
                 };
                 if (props.type === 'text') {
                     props.text = component.innerHTML;
@@ -122,6 +131,10 @@
                     props.src = component.src;
                     props.alt = component.alt;
                     props.align = component.style.textAlign || 'left';
+                    
+                    // Coletar propriedades de tamanho
+                    props.width = component.style.width || component.width + 'px' || '600px';
+                    props.height = component.style.height || component.height + 'px' || '150px';
                     
                     // Adicionar evento de duplo clique para imagens
                     if (!component.hasAttribute('data-dblclick-initialized')) {
@@ -161,6 +174,8 @@
                     if (contentDiv) {
                         props.htmlContent = contentDiv.innerHTML;
                     }
+                } else if (props.type === 'center') {
+                    props.backgroundColor = component.style.backgroundColor || 'transparent';
                 }
 
                 pyBridge.on_component_selected(JSON.stringify(props));

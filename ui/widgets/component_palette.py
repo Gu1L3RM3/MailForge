@@ -20,6 +20,7 @@ class ComponentPalette(QListWidget):
         self.add_component("Botão", "button", "assets/icons/button.png")
         self.add_component("Espaçador", "spacer", "assets/icons/spacer.png")
         self.add_component("Divisor", "divider", "assets/icons/divider.png")
+        self.add_component("Centralizador", "center", "assets/icons/center.png")
         self.add_component("Duas Colunas", "two-columns", "assets/icons/two-columns.png")
         self.add_component("Três Colunas", "three-columns", "assets/icons/three-columns.png")
         self.add_component("Duas Linhas", "two-rows", "assets/icons/two-rows.png")

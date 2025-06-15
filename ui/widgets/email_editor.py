@@ -164,6 +164,7 @@ class EmailEditor(QWebEngineView):
             twitter_icon = get_resource_path(os.path.join('assets', 'icons', 'twitter.png'))
             linkedin_icon = get_resource_path(os.path.join('assets', 'icons', 'linkedin.png'))
             youtube_icon = get_resource_path(os.path.join('assets', 'icons', 'youtube.png'))
+            tiktok_icon = get_resource_path(os.path.join('assets', 'icons', 'tiktok.png'))
             
             # Converter para URLs locais
             facebook_url = QUrl.fromLocalFile(facebook_icon).toString()
@@ -171,6 +172,7 @@ class EmailEditor(QWebEngineView):
             twitter_url = QUrl.fromLocalFile(twitter_icon).toString()
             linkedin_url = QUrl.fromLocalFile(linkedin_icon).toString()
             youtube_url = QUrl.fromLocalFile(youtube_icon).toString()
+            tiktok_url = QUrl.fromLocalFile(tiktok_icon).toString()
             
             return f'''
             <div class="editable-component" data-id="{component_id}" data-type="social" style="text-align: center; margin: 20px 0;">
@@ -189,6 +191,9 @@ class EmailEditor(QWebEngineView):
                 <a href="https://youtube.com" target="_blank" style="display: inline-block; margin: 0 10px;" class="social-icon" data-network="youtube">
                     <img src="{youtube_url}" width="32" height="32" alt="YouTube" style="border: none;">
                 </a>
+                <a href="https://tiktok.com" target="_blank" style="display: inline-block; margin: 0 10px;" class="social-icon" data-network="tiktok">
+                    <img src="{tiktok_url}" width="32" height="32" alt="TikTok" style="border: none;">
+                </a>
             </div>
             '''
         elif component_type == "video":
@@ -201,6 +206,12 @@ class EmailEditor(QWebEngineView):
                     </div>
                 </div>
                 <p style="margin-top: 10px; font-style: italic; color: #666;">Clique para editar o link do vídeo</p>
+            </div>
+            '''
+        elif component_type == "center":
+            return f'''
+            <div class="editable-component drop-column" data-id="{component_id}" data-type="center" style="display: block; text-align: center; padding: 15px; border: 1px solid transparent; background-color: transparent; width: 100%; min-height: 50px;">
+                <div class="placeholder-text" style="color: #999; font-style: italic;">Arraste componentes para centralizar</div>
             </div>
             '''
         elif component_type == "html":
@@ -237,10 +248,21 @@ class EmailEditor(QWebEngineView):
         elif prop == "src" or prop == "href" or prop == "alt":
             js_code += f'el.{prop} = "{value}";'
         elif prop == "bgColor":
-            # Corrigido: A propriedade bgColor no painel de propriedades do botão
+            # Propriedade bgColor para botões
             js_code += f'el.style.backgroundColor = "{value}";'
         elif prop == "height":
             js_code += f'el.style.height = "{value}";'
+        elif prop == "width":
+            # Propriedade width para componentes como imagens
+            js_code += f'''
+                if (el.tagName === 'IMG') {{
+                    el.width = "{value.replace("px", "")}";
+                    el.style.width = "{value}";
+                }} else {{
+                    el.style.width = "{value}";
+                }}
+            '''
+            
         elif prop == "color":
             # 'color' é para a cor do texto
             js_code += f'el.style.color = "{value}";'
@@ -260,6 +282,20 @@ class EmailEditor(QWebEngineView):
                     if ("{value}" === "justify") {{
                         el.style.width = "100%";
                     }}
+                    // Se for centralizado, também centralizamos verticalmente
+                    if ("{value}" === "center") {{
+                        el.style.display = "flex";
+                        el.style.flexDirection = "column";
+                        el.style.justifyContent = "center";
+                        el.style.alignItems = "center";
+                        el.style.minHeight = el.style.height || "auto";
+                    }} else {{
+                        // Remover propriedades de centralização vertical se não estiver centralizado
+                        el.style.display = "";
+                        el.style.flexDirection = "";
+                        el.style.justifyContent = "";
+                        el.style.alignItems = "";
+                    }}
                 }}
             '''
         elif prop == "textColor":
@@ -272,6 +308,8 @@ class EmailEditor(QWebEngineView):
             js_code += f'el.style.borderTopStyle = "{value}";'
         elif prop == "borderColor":
             js_code += f'el.style.borderTopColor = "{value}";'
+        elif prop == "borderWidth":
+            js_code += f'el.style.borderTopWidth = "{value}";'
         elif prop == "gap":
             js_code += f'el.style.gap = "{value}";'
         elif prop == "iconSize":
@@ -303,7 +341,21 @@ class EmailEditor(QWebEngineView):
                         icon.href = "{value}";
                     }}
                 }}
-            '''
+            '''  
+        # Propriedades para bordas arredondadas
+        elif prop == "borderRadius":
+            js_code += f'el.style.borderRadius = "{value}";'
+        elif prop == "borderRadiusTopLeft":
+            js_code += f'el.style.borderTopLeftRadius = "{value}";'
+        elif prop == "borderRadiusTopRight":
+            js_code += f'el.style.borderTopRightRadius = "{value}";'
+        elif prop == "borderRadiusBottomLeft":
+            js_code += f'el.style.borderBottomLeftRadius = "{value}";'
+        elif prop == "borderRadiusBottomRight":
+            js_code += f'el.style.borderBottomRightRadius = "{value}";'
+        # Propriedade para cor de fundo do componente
+        elif prop == "backgroundColor":
+            js_code += f'el.style.backgroundColor = "{value}";'
         elif prop == "videoUrl":
             js_code += f'''
                 // Atualiza o atributo data-video-url da thumbnail

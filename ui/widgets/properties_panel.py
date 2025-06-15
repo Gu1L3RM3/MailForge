@@ -2,6 +2,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget
                              QLineEdit, QPushButton, QFormLayout, QColorDialog, QSpinBox)
 from PySide6.QtGui import QColor, QPalette
 from PySide6.QtCore import Signal
+from PySide6.QtWidgets import QTextEdit,QCheckBox,QGroupBox
 
 class PropertiesPanel(QWidget):
     # Sinais emitidos
@@ -22,7 +23,77 @@ class PropertiesPanel(QWidget):
         # Botão de cor de fundo do email
         self.bg_color_btn = QPushButton("Cor de Fundo do Email")
         self.bg_color_btn.clicked.connect(self.pick_bg_color)
+        self.bg_color_btn.setStyleSheet("background-color: blue; color: white;")
         self.main_layout.addWidget(self.bg_color_btn)
+        
+        # Criar controles de estilo comuns para todos os componentes
+        self.style_controls = QWidget()
+        self.style_layout = QFormLayout(self.style_controls)
+        
+        # Controle de bordas arredondadas
+        self.border_radius_group = QGroupBox("Bordas Arredondadas")
+        self.border_radius_layout = QVBoxLayout(self.border_radius_group)
+        
+        # Opções de tipo de borda
+        self.border_type_layout = QHBoxLayout()
+        self.border_square = QPushButton("Quadradas")
+        self.border_rounded = QPushButton("Arredondadas")
+        self.border_square.clicked.connect(lambda: self.set_border_radius("0px"))
+        self.border_rounded.clicked.connect(lambda: self.show_border_radius_controls())
+        self.border_type_layout.addWidget(self.border_square)
+        self.border_type_layout.addWidget(self.border_rounded)
+        self.border_radius_layout.addLayout(self.border_type_layout)
+        
+        # Controles individuais para cada canto
+        self.corner_controls = QWidget()
+        self.corner_layout = QFormLayout(self.corner_controls)
+        
+        # Controle para todos os cantos
+        self.all_corners_layout = QHBoxLayout()
+        self.all_corners_label = QLabel("Todos os cantos:")
+        self.all_corners_spin = QSpinBox()
+        self.all_corners_spin.setRange(0, 50)
+        self.all_corners_spin.setSuffix(" px")
+        self.all_corners_spin.valueChanged.connect(self.update_all_corners)
+        self.all_corners_layout.addWidget(self.all_corners_label)
+        self.all_corners_layout.addWidget(self.all_corners_spin)
+        self.corner_layout.addRow(self.all_corners_layout)
+        
+        # Controles para cantos individuais
+        self.top_left_spin = QSpinBox()
+        self.top_left_spin.setRange(0, 50)
+        self.top_left_spin.setSuffix(" px")
+        self.top_left_spin.valueChanged.connect(lambda v: self.emit_change("borderRadiusTopLeft", f"{v}px"))
+        
+        self.top_right_spin = QSpinBox()
+        self.top_right_spin.setRange(0, 50)
+        self.top_right_spin.setSuffix(" px")
+        self.top_right_spin.valueChanged.connect(lambda v: self.emit_change("borderRadiusTopRight", f"{v}px"))
+        
+        self.bottom_left_spin = QSpinBox()
+        self.bottom_left_spin.setRange(0, 50)
+        self.bottom_left_spin.setSuffix(" px")
+        self.bottom_left_spin.valueChanged.connect(lambda v: self.emit_change("borderRadiusBottomLeft", f"{v}px"))
+        
+        self.bottom_right_spin = QSpinBox()
+        self.bottom_right_spin.setRange(0, 50)
+        self.bottom_right_spin.setSuffix(" px")
+        self.bottom_right_spin.valueChanged.connect(lambda v: self.emit_change("borderRadiusBottomRight", f"{v}px"))
+        
+        self.corner_layout.addRow("Superior Esquerdo:", self.top_left_spin)
+        self.corner_layout.addRow("Superior Direito:", self.top_right_spin)
+        self.corner_layout.addRow("Inferior Esquerdo:", self.bottom_left_spin)
+        self.corner_layout.addRow("Inferior Direito:", self.bottom_right_spin)
+        
+        # Inicialmente oculta os controles de cantos individuais
+        self.corner_controls.setVisible(False)
+        self.border_radius_layout.addWidget(self.corner_controls)
+        
+        self.style_layout.addRow(self.border_radius_group)
+        
+        # Inicialmente oculta os controles de estilo
+        self.style_controls.setVisible(False)
+        self.main_layout.addWidget(self.style_controls)
         
         # Página 0: Vazio (quando nada está selecionado)
         self.empty_widget = QLabel("Selecione um componente para editar suas propriedades.")
@@ -34,7 +105,7 @@ class PropertiesPanel(QWidget):
         self.text_layout = QFormLayout(self.text_props)
         
         # Substituir QLineEdit por QTextEdit para permitir expansão automática
-        from PySide6.QtWidgets import QTextEdit
+        
         self.text_content_edit = QTextEdit()
         self.text_content_edit.setMinimumHeight(80)
         self.text_content_edit.setAcceptRichText(False)
@@ -44,6 +115,26 @@ class PropertiesPanel(QWidget):
         self.text_content_edit.document().contentsChanged.connect(self.adjust_text_edit_height)
         
         self.text_layout.addRow("Conteúdo:", self.text_content_edit)
+        
+        # Adicionar controles de tamanho para texto
+        self.text_size_group = QGroupBox("Tamanho do Componente")
+        self.text_size_layout = QFormLayout(self.text_size_group)
+        
+        # Controle de largura
+        self.text_width_spin = QSpinBox()
+        self.text_width_spin.setRange(10, 1000)
+        self.text_width_spin.setSuffix(" px")
+        self.text_width_spin.setValue(600)
+        self.text_width_spin.valueChanged.connect(lambda w: self.emit_change("width", f"{w}px"))
+        self.text_size_layout.addRow("Largura:", self.text_width_spin)
+        
+        # Controle de altura
+        self.text_height_spin = QSpinBox()
+        self.text_height_spin.setRange(10, 1000)
+        self.text_height_spin.setSuffix(" px")
+        self.text_height_spin.setValue(150)
+        self.text_height_spin.valueChanged.connect(lambda h: self.emit_change("height", f"{h}px"))
+        self.text_size_layout.addRow("Altura:", self.text_height_spin)
         
         # Adicionar opções de alinhamento
         self.text_align_layout = QVBoxLayout()
@@ -85,20 +176,25 @@ class PropertiesPanel(QWidget):
         
         # Adicionar controle de tamanho de fonte
         self.font_size_layout = QHBoxLayout()
-        self.font_size_label = QLabel("Tamanho da Fonte:")
         self.font_size_spin = QSpinBox()
         self.font_size_spin.setRange(8, 72)
         self.font_size_spin.setSuffix(" px")
         self.font_size_spin.setValue(16)
         self.font_size_spin.valueChanged.connect(lambda s: self.emit_change("fontSize", f"{s}px"))
         
-        self.font_size_layout.addWidget(self.font_size_label)
         self.font_size_layout.addWidget(self.font_size_spin)
+        
+        # Botão de cor de fundo para o componente de texto
+        self.text_bg_color_btn = QPushButton("Cor de Fundo")
+        self.text_bg_color_btn.clicked.connect(self.pick_component_bg_color)
+        self.text_bg_color_btn.setStyleSheet("background-color: blue; color: white;")
         
         self.text_layout.addRow("Alinhamento:", self.text_align_layout)
         self.text_layout.addRow("Fonte:", self.font_layout)
         self.text_layout.addRow("Tamanho da Fonte:", self.font_size_layout)
         self.text_layout.addRow(self.text_color_btn)
+        self.text_layout.addRow(self.text_bg_color_btn)
+        self.text_layout.addRow(self.text_size_group)
         self.stacked_widget.addWidget(self.text_props)
 
         # Página 2: Propriedades de Imagem
@@ -110,6 +206,31 @@ class PropertiesPanel(QWidget):
         self.image_alt_edit.textChanged.connect(lambda t: self.emit_change("alt", t))
         self.upload_image_btn = QPushButton("Carregar Imagem do Computador")
         self.upload_image_btn.clicked.connect(self.request_image_upload)
+        
+        # Adicionar controles de tamanho para imagem
+        self.image_size_group = QGroupBox("Tamanho da Imagem")
+        self.image_size_layout = QFormLayout(self.image_size_group)
+        
+        # Controle de largura
+        self.image_width_spin = QSpinBox()
+        self.image_width_spin.setRange(10, 1000)
+        self.image_width_spin.setSuffix(" px")
+        self.image_width_spin.setValue(600)
+        self.image_width_spin.valueChanged.connect(lambda w: self.emit_change("width", f"{w}px"))
+        self.image_size_layout.addRow("Largura:", self.image_width_spin)
+        
+        # Controle de altura
+        self.image_height_spin = QSpinBox()
+        self.image_height_spin.setRange(10, 1000)
+        self.image_height_spin.setSuffix(" px")
+        self.image_height_spin.setValue(150)
+        self.image_height_spin.valueChanged.connect(lambda h: self.emit_change("height", f"{h}px"))
+        self.image_size_layout.addRow("Altura:", self.image_height_spin)
+        
+        # Checkbox para manter proporção
+        self.image_keep_ratio = QCheckBox("Manter proporção")
+        self.image_keep_ratio.setChecked(True)
+        self.image_size_layout.addRow(self.image_keep_ratio)
         
         # Adicionar opções de alinhamento para imagem
         self.image_align_layout = QVBoxLayout()
@@ -125,10 +246,17 @@ class PropertiesPanel(QWidget):
         self.image_align_layout.addWidget(self.image_align_center)
         self.image_align_layout.addWidget(self.image_align_right)
         
+        # Botão de cor de fundo para o componente de imagem
+        self.image_bg_color_btn = QPushButton("Cor de Fundo")
+        self.image_bg_color_btn.clicked.connect(self.pick_component_bg_color)
+        self.image_bg_color_btn.setStyleSheet("background-color: blue; color: white;")
+        
         self.image_layout.addRow("URL da Imagem:", self.image_src_edit)
         self.image_layout.addRow("Texto Alternativo:", self.image_alt_edit)
+        self.image_layout.addRow(self.image_size_group)
         self.image_layout.addRow("Alinhamento:", self.image_align_layout)
         self.image_layout.addRow(self.upload_image_btn)
+        self.image_layout.addRow(self.image_bg_color_btn)
         self.stacked_widget.addWidget(self.image_props)
 
         # Página 3: Propriedades de Botão
@@ -140,19 +268,18 @@ class PropertiesPanel(QWidget):
         self.button_href_edit.textChanged.connect(lambda t: self.emit_change("href", t))
         self.button_color_btn = QPushButton("Cor de Fundo")
         self.button_color_btn.clicked.connect(self.pick_button_color)
+        self.button_color_btn.setStyleSheet("background-color: blue; color: white;")
         self.button_text_color_btn = QPushButton("Cor do Texto")
         self.button_text_color_btn.clicked.connect(self.pick_button_text_color)
         
         # Adicionar controle de tamanho de fonte para botão
         self.button_font_size_layout = QHBoxLayout()
-        self.button_font_size_label = QLabel("Tamanho da Fonte:")
         self.button_font_size_spin = QSpinBox()
         self.button_font_size_spin.setRange(8, 72)
         self.button_font_size_spin.setSuffix(" px")
         self.button_font_size_spin.setValue(16)
         self.button_font_size_spin.valueChanged.connect(lambda s: self.emit_change("fontSize", f"{s}px"))
         
-        self.button_font_size_layout.addWidget(self.button_font_size_label)
         self.button_font_size_layout.addWidget(self.button_font_size_spin)
         
         # Adicionar opções de alinhamento para botão
@@ -186,6 +313,26 @@ class PropertiesPanel(QWidget):
         self.button_font_layout.addWidget(self.button_font_verdana)
         self.button_font_layout.addWidget(self.button_font_custom)
         
+        # Adicionar controles de tamanho para botão
+        self.button_size_group = QGroupBox("Tamanho do Botão")
+        self.button_size_layout = QFormLayout(self.button_size_group)
+        
+        # Controle de largura
+        self.button_width_spin = QSpinBox()
+        self.button_width_spin.setRange(10, 1000)
+        self.button_width_spin.setSuffix(" px")
+        self.button_width_spin.setValue(200)
+        self.button_width_spin.valueChanged.connect(lambda w: self.emit_change("width", f"{w}px"))
+        self.button_size_layout.addRow("Largura:", self.button_width_spin)
+        
+        # Controle de altura
+        self.button_height_spin = QSpinBox()
+        self.button_height_spin.setRange(10, 1000)
+        self.button_height_spin.setSuffix(" px")
+        self.button_height_spin.setValue(40)
+        self.button_height_spin.valueChanged.connect(lambda h: self.emit_change("height", f"{h}px"))
+        self.button_size_layout.addRow("Altura:", self.button_height_spin)
+        
         self.button_layout.addRow("Texto do Botão:", self.button_text_edit)
         self.button_layout.addRow("URL do Link:", self.button_href_edit)
         self.button_layout.addRow("Alinhamento:", self.button_align_layout)
@@ -193,6 +340,7 @@ class PropertiesPanel(QWidget):
         self.button_layout.addRow("Tamanho da Fonte:", self.button_font_size_layout)
         self.button_layout.addRow(self.button_color_btn)
         self.button_layout.addRow(self.button_text_color_btn)
+        self.button_layout.addRow(self.button_size_group)
         self.stacked_widget.addWidget(self.button_props)
 
         # Página 4: Propriedades do Espaçador
@@ -220,19 +368,51 @@ class PropertiesPanel(QWidget):
         self.divider_style_layout.addWidget(self.divider_solid)
         self.divider_style_layout.addWidget(self.divider_dashed)
         self.divider_style_layout.addWidget(self.divider_dotted)
+        
+        # Controle de espessura do divisor
+        self.divider_thickness_layout = QHBoxLayout()
+        self.divider_thickness_label = QLabel("Espessura:")
+        self.divider_thickness_spin = QSpinBox()
+        self.divider_thickness_spin.setRange(1, 10)
+        self.divider_thickness_spin.setSuffix(" px")
+        self.divider_thickness_spin.setValue(1)
+        self.divider_thickness_spin.valueChanged.connect(lambda t: self.emit_change("borderWidth", f"{t}px"))
+        self.divider_thickness_layout.addWidget(self.divider_thickness_label)
+        self.divider_thickness_layout.addWidget(self.divider_thickness_spin)
+        
         self.divider_layout.addRow("Estilo:", self.divider_style_layout)
+        self.divider_layout.addRow(self.divider_thickness_layout)
         self.divider_layout.addRow(self.divider_color_btn)
         self.stacked_widget.addWidget(self.divider_props)
         
-        # Página 6: Propriedades de Colunas
+        # Página 6: Propriedades de Colunas e Center
         self.columns_props = QWidget()
         self.columns_layout = QFormLayout(self.columns_props)
+        
+        # Propriedades específicas para colunas
+        self.columns_group = QGroupBox("Propriedades de Colunas")
+        self.columns_group_layout = QFormLayout(self.columns_group)
         self.columns_gap_spin = QSpinBox()
         self.columns_gap_spin.setRange(0, 100)
         self.columns_gap_spin.setSuffix(" px")
         self.columns_gap_spin.setValue(20)
         self.columns_gap_spin.valueChanged.connect(lambda g: self.emit_change("gap", f"{g}px"))
-        self.columns_layout.addRow("Espaçamento entre colunas:", self.columns_gap_spin)
+        self.columns_group_layout.addRow("Espaçamento entre colunas:", self.columns_gap_spin)
+        
+        # Propriedades específicas para o componente center
+        self.center_group = QGroupBox("Propriedades do Centralizador")
+        self.center_group_layout = QFormLayout(self.center_group)
+        
+        # Botão de cor de fundo para o componente center
+        self.center_bg_color_btn = QPushButton("Cor de Fundo")
+        self.center_bg_color_btn.clicked.connect(self.pick_component_bg_color)
+        self.center_bg_color_btn.setStyleSheet("background-color: blue; color: white;")
+        self.center_group_layout.addRow(self.center_bg_color_btn)
+        
+        # Adiciona os grupos ao layout principal
+        self.columns_layout.addRow(self.columns_group)
+        self.columns_layout.addRow(self.center_group)
+        
         self.stacked_widget.addWidget(self.columns_props)
         
         # Página 7: Propriedades de Redes Sociais
@@ -261,7 +441,7 @@ class PropertiesPanel(QWidget):
         self.social_layout.addRow("Alinhamento:", self.social_align_layout)
         
         # Checkboxes para escolher quais redes sociais exibir
-        from PySide6.QtWidgets import QCheckBox, QGroupBox
+        
         self.social_networks_group = QGroupBox("Redes Sociais a Exibir")
         self.social_networks_layout = QVBoxLayout()
         
@@ -270,24 +450,28 @@ class PropertiesPanel(QWidget):
         self.twitter_check = QCheckBox("Twitter")
         self.linkedin_check = QCheckBox("LinkedIn")
         self.youtube_check = QCheckBox("YouTube")
+        self.tiktok_check = QCheckBox("TikTok")
         
         self.facebook_check.setChecked(True)
         self.instagram_check.setChecked(True)
         self.twitter_check.setChecked(True)
         self.linkedin_check.setChecked(True)
         self.youtube_check.setChecked(True)
+        self.tiktok_check.setChecked(True)
         
         self.facebook_check.stateChanged.connect(lambda state: self.emit_change("showFacebook", bool(state)))
         self.instagram_check.stateChanged.connect(lambda state: self.emit_change("showInstagram", bool(state)))
         self.twitter_check.stateChanged.connect(lambda state: self.emit_change("showTwitter", bool(state)))
         self.linkedin_check.stateChanged.connect(lambda state: self.emit_change("showLinkedin", bool(state)))
         self.youtube_check.stateChanged.connect(lambda state: self.emit_change("showYoutube", bool(state)))
+        self.tiktok_check.stateChanged.connect(lambda state: self.emit_change("showTiktok", bool(state)))
         
         self.social_networks_layout.addWidget(self.facebook_check)
         self.social_networks_layout.addWidget(self.instagram_check)
         self.social_networks_layout.addWidget(self.twitter_check)
         self.social_networks_layout.addWidget(self.linkedin_check)
         self.social_networks_layout.addWidget(self.youtube_check)
+        self.social_networks_layout.addWidget(self.tiktok_check)
         
         self.social_networks_group.setLayout(self.social_networks_layout)
         self.social_layout.addRow(self.social_networks_group)
@@ -301,18 +485,21 @@ class PropertiesPanel(QWidget):
         self.twitter_link = QLineEdit("https://twitter.com")
         self.linkedin_link = QLineEdit("https://linkedin.com")
         self.youtube_link = QLineEdit("https://youtube.com")
+        self.tiktok_link = QLineEdit("https://tiktok.com")
         
         self.facebook_link.textChanged.connect(lambda t: self.emit_change("facebookLink", t))
         self.instagram_link.textChanged.connect(lambda t: self.emit_change("instagramLink", t))
         self.twitter_link.textChanged.connect(lambda t: self.emit_change("twitterLink", t))
         self.linkedin_link.textChanged.connect(lambda t: self.emit_change("linkedinLink", t))
         self.youtube_link.textChanged.connect(lambda t: self.emit_change("youtubeLink", t))
+        self.tiktok_link.textChanged.connect(lambda t: self.emit_change("tiktokLink", t))
         
         self.social_links_layout.addRow("Facebook:", self.facebook_link)
         self.social_links_layout.addRow("Instagram:", self.instagram_link)
         self.social_links_layout.addRow("Twitter:", self.twitter_link)
         self.social_links_layout.addRow("LinkedIn:", self.linkedin_link)
         self.social_links_layout.addRow("YouTube:", self.youtube_link)
+        self.social_links_layout.addRow("TikTok:", self.tiktok_link)
         
         self.social_links_group.setLayout(self.social_links_layout)
         self.social_layout.addRow(self.social_links_group)
@@ -335,7 +522,6 @@ class PropertiesPanel(QWidget):
         # Página 9: Propriedades de HTML
         self.html_props = QWidget()
         self.html_layout = QFormLayout(self.html_props)
-        from PySide6.QtWidgets import QTextEdit
         self.html_content_edit = QTextEdit() # Usando QTextEdit para ter mais espaço
         self.html_content_edit.setMinimumHeight(500)  # Aumentando ainda mais a altura mínima
         self.html_content_edit.setMinimumWidth(350)   # Definindo uma largura mínima
@@ -380,7 +566,8 @@ class PropertiesPanel(QWidget):
             "three-columns": 6,
             "social": 7,
             "video": 8,
-            "html": 9
+            "html": 9,
+            "center": 6
         }
         
         # Adicionar controles de componente (excluir, mover para cima/baixo)
@@ -442,6 +629,46 @@ class PropertiesPanel(QWidget):
         
         # Mostra os controles de componente
         self.component_controls.setVisible(True)
+        
+        # Mostra os controles de estilo comuns
+        self.style_controls.setVisible(True)
+        
+        # Carrega as propriedades de estilo
+        bg_color = props.get('backgroundColor', '')
+        
+        # Não alteramos mais a cor de fundo dos botões para manter consistência visual
+        # A cor de fundo do componente é tratada internamente sem alterar a aparência dos botões
+            
+        # Carrega as propriedades de borda
+        border_radius = props.get('borderRadius', '0px')
+        if border_radius != '0px':
+            # Se tiver borda arredondada, mostra os controles individuais
+            self.corner_controls.setVisible(True)
+            
+            # Tenta extrair o valor numérico
+            try:
+                radius_value = int(border_radius.replace('px', ''))
+                self.all_corners_spin.setValue(radius_value)
+            except (ValueError, AttributeError):
+                self.all_corners_spin.setValue(0)
+                
+            # Carrega valores individuais para cada canto
+            top_left = props.get('borderRadiusTopLeft', border_radius)
+            top_right = props.get('borderRadiusTopRight', border_radius)
+            bottom_left = props.get('borderRadiusBottomLeft', border_radius)
+            bottom_right = props.get('borderRadiusBottomRight', border_radius)
+            
+            try:
+                self.top_left_spin.setValue(int(top_left.replace('px', '')))
+                self.top_right_spin.setValue(int(top_right.replace('px', '')))
+                self.bottom_left_spin.setValue(int(bottom_left.replace('px', '')))
+                self.bottom_right_spin.setValue(int(bottom_right.replace('px', '')))
+            except (ValueError, AttributeError):
+                pass
+        else:
+            # Se não tiver borda arredondada, oculta os controles individuais
+            self.corner_controls.setVisible(False)
+            self.all_corners_spin.setValue(0)
 
         if self.current_component_type == "text":
             self.text_content_edit.setText(props.get('text', ''))
@@ -477,6 +704,23 @@ class PropertiesPanel(QWidget):
             self.image_src_edit.setText(props.get('src', ''))
             self.image_alt_edit.setText(props.get('alt', ''))
             
+            # Carregar valores de largura e altura
+            width = props.get('width', '600px')
+            height = props.get('height', '150px')
+            
+            # Extrair valores numéricos
+            try:
+                width_value = int(width.replace('px', ''))
+                self.image_width_spin.setValue(width_value)
+            except (ValueError, AttributeError):
+                self.image_width_spin.setValue(600)
+                
+            try:
+                height_value = int(height.replace('px', ''))
+                self.image_height_spin.setValue(height_value)
+            except (ValueError, AttributeError):
+                self.image_height_spin.setValue(150)
+            
             # Destacar o botão de alinhamento ativo para imagens
             align = props.get('align', 'left')
             self.image_align_left.setStyleSheet("font-weight: normal;")
@@ -503,6 +747,24 @@ class PropertiesPanel(QWidget):
                     self.button_font_size_spin.setValue(size_value)
                 except (ValueError, AttributeError):
                     self.button_font_size_spin.setValue(16)
+                    
+            # Carregar valores de largura e altura para o componente de botão
+            width = props.get('width', '')
+            height = props.get('height', '')
+            
+            if width:
+                try:
+                    width_value = int(width.replace('px', ''))
+                    self.button_width_spin.setValue(width_value)
+                except (ValueError, AttributeError):
+                    self.button_width_spin.setValue(200)
+            
+            if height:
+                try:
+                    height_value = int(height.replace('px', ''))
+                    self.button_height_spin.setValue(height_value)
+                except (ValueError, AttributeError):
+                    self.button_height_spin.setValue(40)
         elif self.current_component_type == "spacer":
             height = int(props.get('height', '20px').replace('px', ''))
             self.spacer_height_spin.setValue(height)
@@ -523,6 +785,16 @@ class PropertiesPanel(QWidget):
             # Atualizar cor do divisor
             color = QColor(props.get('borderColor', '#ccc'))
             self.divider_color_btn.setStyleSheet(f"background-color: {color.name()};")
+            
+            # Atualiza o valor da espessura do divisor
+            border_width = props.get('borderWidth', '1px')
+            if border_width:
+                try:
+                    # Extrai o valor numérico da string (ex: '2px' -> 2)
+                    width_value = int(border_width.replace('px', ''))
+                    self.divider_thickness_spin.setValue(width_value)
+                except (ValueError, AttributeError):
+                    self.divider_thickness_spin.setValue(1)
         elif self.current_component_type in ["two-columns", "three-columns"]:
             # Atualizar espaçamento entre colunas
             gap = props.get('gap', '20px')
@@ -574,6 +846,12 @@ class PropertiesPanel(QWidget):
         
         # Oculta os controles de componente
         self.component_controls.setVisible(False)
+        
+        # Oculta os controles de estilo comuns
+        self.style_controls.setVisible(False)
+        
+        # Oculta os controles de bordas arredondadas
+        self.corner_controls.setVisible(False)
 
     def emit_change(self, prop_name, value):
         if self.current_component_id:
@@ -602,6 +880,34 @@ class PropertiesPanel(QWidget):
         if color.isValid():
             # Não altera a cor do botão, apenas emite o sinal para mudar a cor de fundo do email
             self.property_changed.emit("", "bgColor", color.name())
+            
+    def pick_component_bg_color(self):
+        color = QColorDialog.getColor()
+        if color.isValid():
+            # Não altera a cor do botão, apenas emite o sinal para mudar a cor de fundo do componente
+            # Emite a mudança para atualizar a cor de fundo do componente
+            self.emit_change("backgroundColor", color.name())
+            
+    def set_border_radius(self, value):
+        # Define o mesmo valor para todos os cantos
+        self.emit_change("borderRadius", value)
+        
+    def show_border_radius_controls(self):
+        # Mostra os controles de raio de borda individuais
+        self.corner_controls.setVisible(True)
+        
+    def update_all_corners(self, value):
+        # Atualiza todos os spinners com o mesmo valor
+        self.blockSignals(True)
+        self.top_left_spin.setValue(value)
+        self.top_right_spin.setValue(value)
+        self.bottom_left_spin.setValue(value)
+        self.bottom_right_spin.setValue(value)
+        self.blockSignals(False)
+        
+        # Emite a mudança para todos os cantos
+        radius_value = f"{value}px"
+        self.emit_change("borderRadius", radius_value)
             
     def request_delete(self):
         self.delete_component.emit()
