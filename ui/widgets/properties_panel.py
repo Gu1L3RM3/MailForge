@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QStackedWidget, QLabel, 
                              QLineEdit, QPushButton, QFormLayout, QColorDialog, QSpinBox)
-from PySide6.QtGui import QColor, QPalette
+from PySide6.QtGui import QColor, QPalette, QTextCursor
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import QTextEdit,QCheckBox,QGroupBox
 
@@ -835,7 +835,9 @@ class PropertiesPanel(QWidget):
         elif self.current_component_type == "html":
             # Atualizar conteúdo HTML
             html_content = props.get('htmlContent', '')
-            self.html_content_edit.setText(html_content)
+            # Preservar o conteúdo HTML exatamente como está no componente
+            
+            self.html_content_edit.setPlainText(html_content)
             
         self.blockSignals(False)
 
@@ -889,7 +891,6 @@ class PropertiesPanel(QWidget):
             self.emit_change("backgroundColor", color.name())
             
     def set_border_radius(self, value):
-        # Define o mesmo valor para todos os cantos
         self.emit_change("borderRadius", value)
         
     def show_border_radius_controls(self):
@@ -985,7 +986,8 @@ class PropertiesPanel(QWidget):
             # Se não há texto selecionado, apenas insere as tags e posiciona o cursor entre elas
             cursor.insertText(opening_tag + closing_tag)
             # Move o cursor para entre as tags
-            cursor.movePosition(cursor.Left, cursor.MoveAnchor, len(closing_tag))
+            from PySide6.QtGui import QTextCursor
+            cursor.movePosition(QTextCursor.Left, QTextCursor.MoveAnchor, len(closing_tag))
             self.html_content_edit.setTextCursor(cursor)
             
     def adjust_text_edit_height(self):

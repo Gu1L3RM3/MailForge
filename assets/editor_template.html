@@ -88,6 +88,11 @@
 
         // Lógica de seleção de componente
         document.body.addEventListener('click', function(e) {
+            // Prevenir navegação para links durante a edição
+            if (e.target.tagName === 'A' || e.target.closest('a')) {
+                e.preventDefault();
+            }
+            
             // Se o clique foi fora da drop-zone, deselecione
             if (!dropZone.contains(e.target)) {
                  if (selectedComponent) {
@@ -124,7 +129,8 @@
                     height: component.style.height || ''
                 };
                 if (props.type === 'text') {
-                    props.text = component.innerHTML;
+                    const textContent = component.querySelector('.text-content');
+                    props.text = textContent ? textContent.innerHTML : component.innerHTML;
                     props.color = component.style.color || '#333';
                     props.fontSize = component.style.fontSize || '16px';
                 } else if (props.type === 'image') {
@@ -170,10 +176,11 @@
                         props.videoUrl = thumbnail.getAttribute('data-video-url') || '';
                     }
                 } else if (props.type === 'html') {
-                    const contentDiv = component.querySelector('div');
-                    if (contentDiv) {
-                        props.htmlContent = contentDiv.innerHTML;
-                    }
+                    // Armazena o HTML bruto no dataset e nas props
+                    props.htmlContent = component.dataset.rawHtml || component.innerHTML || '';
+                    // Garante que o HTML bruto está sempre atualizado no dataset
+                    component.dataset.rawHtml = props.htmlContent;
+                    
                 } else if (props.type === 'center') {
                     props.backgroundColor = component.style.backgroundColor || 'transparent';
                 }

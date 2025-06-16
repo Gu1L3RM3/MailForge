@@ -1,6 +1,7 @@
 import uuid
 import json
 import os
+import html
 from PySide6.QtCore import Slot, QObject, Signal, QUrl
 from PySide6.QtWidgets import QFileDialog
 from PySide6.QtWebEngineCore import QWebEnginePage
@@ -98,7 +99,9 @@ class EmailEditor(QWebEngineView):
 
     def get_html_for_component(self, component_type, component_id):
         if component_type == "text":
-            return f'<div class="editable-component" data-id="{component_id}" data-type="text">Clique para editar este texto.</div>'
+            return f'''<div class="editable-component" data-id="{component_id}" data-type="text" style="height: 50px;">
+                        <span class="text-content">Clique para editar este texto.</span>
+                    </div>'''
         elif component_type == "image":
             return f'<div style="text-align: left;"><img src="https://via.placeholder.com/600x150.png?text=Arraste+uma+imagem" alt="Imagem" class="editable-component" data-id="{component_id}" data-type="image"></div>'
         elif component_type == "button":
@@ -210,139 +213,154 @@ class EmailEditor(QWebEngineView):
             '''
         elif component_type == "center":
             return f'''
-            <div class="editable-component drop-column" data-id="{component_id}" data-type="center" style="display: block; text-align: center; padding: 15px; border: 1px solid transparent; background-color: transparent; width: 100%; min-height: 50px;">
+            <div class="editable-component drop-column" data-id="{component_id}" data-type="center" style="display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 15px; border: 1px solid transparent; background-color: transparent; width: 100%; height: 100%; min-height: 50px; box-sizing: border-box;">
                 <div class="placeholder-text" style="color: #999; font-style: italic;">Arraste componentes para centralizar</div>
             </div>
             '''
         elif component_type == "html":
+            initial_code = "<!-- Insira seu código HTML personalizado aqui -->"
+            escaped_code = html.escape(initial_code,quote=True)
             return f'''
-            <div class="editable-component" data-id="{component_id}" data-type="html" style="margin: 20px 0; border: 1px dashed #ccc; padding: 15px;">
-                <div style="font-family: monospace; white-space: pre-wrap;"><!-- Insira seu código HTML personalizado aqui --></div>
+            <div class="editable-component" data-id="{component_id}" data-type="html" 
+                 data-raw-html="{escaped_code}" 
+                 style="margin: 20px 0; border: 1px dashed #ccc; padding: 15px;">
+                <div class="html-content-view" style="font-family: monospace; white-space: pre-wrap;">{initial_code}</div>
             </div>
             '''
         return ""
 
-    def update_component_property(self, component_id, prop, value):
-        # Escapa aspas para não quebrar o JS
-        if isinstance(value, str):
-            value = value.replace('"', '\\"').replace('\n', '\\n').replace('`', '\\`')
+    # Dentro da classe EmailEditor em ui/widgets/email_editor.py
 
-        # Lógica especial para propriedades globais (sem component_id)
+    def update_component_property(self, component_id, prop, value):
+        # --- LÓGICA DE ESCAPE UNIFICADA ---
+        # Prepara o valor para ser injetado de forma segura no código JavaScript.
+        # Usa template literals (`) como o método padrão para strings.
+        js_value = ""
+        if isinstance(value, str):
+            # Escapa os caracteres que conflitam com template literals do JS:
+            # ` (acento grave), \ (barra invertida) e ${ (interpolação).
+            js_value = value.replace('\\', '\\\\').replace('`', '\\`').replace('${', '\\${')
+            # Coloca o valor dentro dos acentos graves para formar uma string JS.
+            js_value_str = f"`{js_value}`"
+        elif isinstance(value, bool):
+            # Converte booleano Python para string JS (true/false).
+            js_value_str = str(value).lower()
+        else:
+            # Para números e outros tipos, json.dumps é seguro.
+            import json
+            js_value_str = json.dumps(value)
+
+        # --- LÓGICA PARA PROPRIEDADES GLOBAIS ---
         if not component_id:
             if prop == "bgColor":
-                # Altera diretamente o fundo do 'drop-zone'
-                js_code = f"document.getElementById('drop-zone').style.backgroundColor = '{value}';"
+                js_code = f"document.getElementById('drop-zone').style.backgroundColor = {js_value_str};"
                 self.page().runJavaScript(js_code)
-            # Se houver outras propriedades globais no futuro, podem ser adicionadas aqui
-            return  # Sai da função após lidar com a propriedade global
+            return
 
-        # A lógica para componentes específicos
+        # --- LÓGICA PARA COMPONENTES ESPECÍFICOS ---
         js_code = f"""
             var el = document.querySelector('[data-id="{component_id}"]');
             if (el) {{
         """
-        
-        # Propriedades de texto e botão
+
         if prop == "text":
-            js_code += f'el.innerHTML = `{value}`;' # Usar backticks para multiline
-        elif prop == "src" or prop == "href" or prop == "alt":
-            js_code += f'el.{prop} = "{value}";'
+            js_code += f'''
+            // Verifica se é um botão ou um componente de texto
+            if (el.dataset.type === 'button') {{
+                // Para botões, atualiza o innerText diretamente
+                el.innerText = {js_value_str};
+            }} else {{
+                // Para outros componentes de texto, procura pelo elemento .text-content
+                var content = el.querySelector('.text-content');
+                if (content) {{
+                    content.innerHTML = {js_value_str};
+                }}
+            }}
+        '''
+        elif prop in ["src", "href", "alt"]:
+            js_code += f'el.{prop} = {js_value_str};'
         elif prop == "bgColor":
-            # Propriedade bgColor para botões
-            js_code += f'el.style.backgroundColor = "{value}";'
+            js_code += f'el.style.backgroundColor = {js_value_str};'
         elif prop == "height":
-            js_code += f'el.style.height = "{value}";'
+            js_code += f'el.style.height = {js_value_str};'
         elif prop == "width":
-            # Propriedade width para componentes como imagens
+            # Para imagens, o atributo 'width' também deve ser atualizado.
             js_code += f'''
+                el.style.width = {js_value_str};
                 if (el.tagName === 'IMG') {{
-                    el.width = "{value.replace("px", "")}";
-                    el.style.width = "{value}";
-                }} else {{
-                    el.style.width = "{value}";
+                    el.width = String({js_value_str}).replace("px", "");
                 }}
             '''
-            
-        elif prop == "color":
-            # 'color' é para a cor do texto
-            js_code += f'el.style.color = "{value}";'
+        elif prop == "color" or prop == "textColor":
+            js_code += f'el.style.color = {js_value_str};'
+        # CÓDIGO NOVO E CORRIGIDO (dentro de update_component_property)
         elif prop == "align":
-            # Verifica se é um botão ou imagem e aplica o alinhamento ao elemento pai
             js_code += f'''
-                if (el.dataset.type === "button" || (el.tagName === 'IMG' && el.parentElement.style.textAlign !== undefined)) {{
-                    // Para botões e imagens, aplicamos o alinhamento ao elemento pai
-                    var parentEl = el.parentElement;
-                    if (parentEl) {{
-                        parentEl.style.textAlign = "{value}";
-                    }}
-                }} else {{
-                    // Para outros elementos (como texto), aplicamos diretamente
-                    el.style.textAlign = "{value}";
-                    // Se for justificado, também ajustamos a largura para 100% para evitar que o texto saia do bloco
-                    if ("{value}" === "justify") {{
-                        el.style.width = "100%";
-                    }}
-                    // Se for centralizado, também centralizamos verticalmente
-                    if ("{value}" === "center") {{
-                        el.style.display = "flex";
-                        el.style.flexDirection = "column";
-                        el.style.justifyContent = "center";
-                        el.style.alignItems = "center";
-                        el.style.minHeight = el.style.height || "auto";
-                    }} else {{
-                        // Remover propriedades de centralização vertical se não estiver centralizado
-                        el.style.display = "";
-                        el.style.flexDirection = "";
-                        el.style.justifyContent = "";
-                        el.style.alignItems = "";
-                    }}
-                }}
-            '''
-        elif prop == "textColor":
-            js_code += f'el.style.color = "{value}";'
+        // Tratamento especial para componente de texto para permitir centralização vertical
+        if (el.dataset.type === 'text') {{
+            if ({js_value_str} === 'center') {{
+                // Aplica Flexbox para centralização visual no *editor*
+                el.style.display = 'flex';
+                el.style.justifyContent = 'center';
+                el.style.alignItems = 'center';
+                el.style.textAlign = 'center';
+            }} else {{
+                // Reverte para o comportamento padrão
+                el.style.display = 'block'; // 'block' é o padrão para <div>
+                el.style.justifyContent = '';
+                el.style.alignItems = '';
+                el.style.textAlign = {js_value_str};
+            }}
+            // Adiciona o atributo data-align para que a exportação saiba o que fazer
+            el.setAttribute('data-align', {js_value_str});
+        }}
+        // Lógica para outros componentes que são alinhados pelo seu contêiner pai
+        else if (el.dataset.type === "button" || el.dataset.type === "social" || (el.tagName === 'IMG' && el.parentElement)) {{
+            var parentEl = el.parentElement;
+            if (parentEl) {{
+                parentEl.style.textAlign = {js_value_str};
+                parentEl.setAttribute('data-align', {js_value_str});
+            }}
+        }}
+        // Fallback
+        else {{
+            el.style.textAlign = {js_value_str};
+            el.setAttribute('data-align', {js_value_str});
+        }}
+    '''
         elif prop == "fontFamily":
-            js_code += f'el.style.fontFamily = "{value}";'
+            js_code += f'el.style.fontFamily = {js_value_str};'
         elif prop == "fontSize":
-            js_code += f'el.style.fontSize = "{value}";'
+            js_code += f'el.style.fontSize = {js_value_str};'
         elif prop == "borderStyle":
-            js_code += f'el.style.borderTopStyle = "{value}";'
+            js_code += f'el.style.borderTopStyle = {js_value_str};'
         elif prop == "borderColor":
-            js_code += f'el.style.borderTopColor = "{value}";'
+            js_code += f'el.style.borderTopColor = {js_value_str};'
         elif prop == "borderWidth":
-            js_code += f'el.style.borderTopWidth = "{value}";'
+            js_code += f'el.style.borderTopWidth = {js_value_str};'
         elif prop == "gap":
-            js_code += f'el.style.gap = "{value}";'
+            js_code += f'el.style.gap = {js_value_str};'
         elif prop == "iconSize":
             js_code += f'''
-                var imgs = el.querySelectorAll('img');
-                for (var i = 0; i < imgs.length; i++) {{
-                    imgs[i].setAttribute('width', "{value}");
-                    imgs[i].setAttribute('height', "{value}");
-                }}
+                el.querySelectorAll('img').forEach(img => {{
+                    img.setAttribute('width', {js_value_str});
+                    img.setAttribute('height', {js_value_str});
+                }});
             '''
-        # Propriedades para mostrar/ocultar ícones de redes sociais
         elif prop.startswith("show"):
+            network = prop[4:].lower()
             js_code += f'''
-                if (el.dataset.type === "social") {{
-                    var network = "{prop[4:]}".toLowerCase();  // Extrai o nome da rede (ex: Facebook -> facebook)
-                    var icon = el.querySelector('[data-network="' + network + '"]');
-                    if (icon) {{
-                        icon.style.display = "{"inline-block" if value else "none"}";
-                    }}
+                var icon = el.querySelector('[data-network="{network}"]');
+                if (icon) {{
+                    icon.style.display = {js_value_str} ? "inline-block" : "none";
                 }}
             '''
-        # Propriedades para links individuais de redes sociais
         elif prop.endswith("Link"):
+            network = prop[:-4].lower()
             js_code += f'''
-                if (el.dataset.type === "social") {{
-                    var network = "{prop[:-4]}".toLowerCase();  // Extrai o nome da rede (ex: facebookLink -> facebook)
-                    var icon = el.querySelector('[data-network="' + network + '"]');
-                    if (icon) {{
-                        icon.href = "{value}";
-                    }}
-                }}
-            '''  
-        # Propriedades para bordas arredondadas
+                var icon = el.querySelector('[data-network="{network}"]');
+                if (icon) {{ icon.href = {js_value_str}; }}
+            '''
         elif prop == "borderRadius":
             js_code += f'el.style.borderRadius = "{value}";'
         elif prop == "borderRadiusTopLeft":
@@ -353,31 +371,28 @@ class EmailEditor(QWebEngineView):
             js_code += f'el.style.borderBottomLeftRadius = "{value}";'
         elif prop == "borderRadiusBottomRight":
             js_code += f'el.style.borderBottomRightRadius = "{value}";'
-        # Propriedade para cor de fundo do componente
         elif prop == "backgroundColor":
-            js_code += f'el.style.backgroundColor = "{value}";'
+            js_code += f'el.style.backgroundColor = {js_value_str};'
         elif prop == "videoUrl":
             js_code += f'''
-                // Atualiza o atributo data-video-url da thumbnail
                 var thumbnail = el.querySelector('.video-thumbnail');
-                if (thumbnail) {{
-                    thumbnail.setAttribute('data-video-url', "{value}");
-                }}
+                if (thumbnail) {{ thumbnail.setAttribute('data-video-url', {js_value_str}); }}
             '''
         elif prop == "thumbnailUrl":
             js_code += f'''
-                // Atualiza a URL da thumbnail do vídeo
                 var thumbnail = el.querySelector('.video-thumbnail');
-                if (thumbnail) {{
-                    thumbnail.src = "{value}";
-                }}
+                if (thumbnail) {{ thumbnail.src = {js_value_str}; }}
             '''
         elif prop == "htmlContent":
+            # Lógica corrigida para o componente HTML
             js_code += f'''
-                // Atualiza o conteúdo HTML personalizado
-                var contentDiv = el.querySelector('div');
+                // 1. Atualiza o atributo 'data-raw-html' (fonte da verdade) com o código-fonte.
+                el.dataset.rawHtml = {js_value_str};
+                
+                // 2. Atualiza a div interna para a visualização.
+                var contentDiv = el.querySelector('.html-content-view');
                 if (contentDiv) {{
-                    contentDiv.innerHTML = `{value}`;
+                    contentDiv.innerHTML = {js_value_str};
                 }}
             '''
         
@@ -389,11 +404,67 @@ class EmailEditor(QWebEngineView):
         js_code = "document.getElementById('drop-zone').innerHTML;"
         self.page().runJavaScript(js_code, 0, callback)
 
+
+
     def set_html_content(self, html):
-        # Limpa o conteúdo atual e insere o novo
+        """
+        Limpa o conteúdo atual do editor e insere o novo HTML de um projeto.
+        Em seguida, re-anexa os listeners de eventos aos componentes.
+        """
+        # Escapa o HTML para ser inserido de forma segura em uma template literal do JS
+        js_html = html.replace('\\', '\\\\').replace('`', '\\`').replace('${', '\\${')
+
         js_code = f"""
-        // Usando a variável global dropZone já declarada no template
-        dropZone.innerHTML = `{html.replace('`', '\\`')}`;
+        // 1. Injeta o HTML do projeto no editor.
+        dropZone.innerHTML = `{js_html}`;
+
+        // 2. Re-anexa o listener de clique a todos os componentes existentes.
+        // O event.currentTarget garante que estamos selecionando o elemento que tem o listener.
+        document.querySelectorAll('.editable-component').forEach(component => {{
+            component.addEventListener('click', (event) => {{
+                // Prevenir navegação para links durante a edição
+                if (event.target.tagName === 'A' || event.target.closest('a')) {{
+                    event.preventDefault();
+                }}
+                
+                // A lógica de seleção é chamada aqui.
+                // Isso evita o problema de múltiplos listeners.
+                const clickedComponent = event.currentTarget;
+                
+                if (selectedComponent) {{
+                    selectedComponent.classList.remove('selected');
+                }}
+
+                if (clickedComponent) {{
+                    clickedComponent.classList.add('selected');
+                    selectedComponent = clickedComponent;
+
+                    // Coleta as propriedades como antes
+                    const props = {{
+                        id: clickedComponent.dataset.id,
+                        type: clickedComponent.dataset.type,
+                        align: clickedComponent.style.textAlign || 'left',
+                        borderRadius: clickedComponent.style.borderRadius || '0px',
+                        width: clickedComponent.style.width || '',
+                        height: clickedComponent.style.height || ''
+                        // Adicione outras propriedades comuns se necessário
+                    }};
+                    
+                    if (props.type === 'html') {{
+                        props.htmlContent = clickedComponent.dataset.rawHtml || '';
+                    }} else if (props.type === 'text') {{
+                        props.text = clickedComponent.innerHTML;
+                    }}
+                    // Adicione outras lógicas de coleta de 'props' aqui...
+
+                    pyBridge.on_component_selected(JSON.stringify(props));
+                }}
+                event.stopPropagation();
+            }});
+        }});
+
+        // 3. Reativa as zonas de drop para os layouts de colunas/linhas
+        setupDropColumns();
         """
         self.page().runJavaScript(js_code)
         
