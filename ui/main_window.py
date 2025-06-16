@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QMainWindow, QDockWidget, QFileDialog, QMessageBox)
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QAction
-
+import re
 from ui.widgets.component_palette import ComponentPalette
 from ui.widgets.properties_panel import PropertiesPanel
 from ui.widgets.email_editor import EmailEditor
@@ -65,47 +65,166 @@ class MainWindow(QMainWindow):
         file_menu.addAction(self.config_action)
         file_menu.addSeparator()
         file_menu.addAction(self.exit_action)
-# Dentro da classe MainWindow em ui/main_window.py
+
+
+
+
+
 
     def _clean_html_for_sending(self, raw_html):
         """
-        Usa BeautifulSoup para limpar o HTML do editor, preparando-o para envio.
-        - Remove wrappers de componentes HTML.
-        - Remove classes e atributos de dados específicos do editor.
-        - Remove bordas pontilhadas dos componentes de rows e columns.
+        Converte o HTML do editor em um formato compatível com email, processando
+        layouts de coluna/linha e componentes individuais em tabelas aninhadas.
         """
+        if not raw_html:
+            return ""
+
         soup = BeautifulSoup(raw_html, 'html.parser')
 
-        # 1. Substitui os componentes de HTML customizado pelo seu conteúdo bruto
-        for html_component in soup.find_all(attrs={"data-type": "html"}):
-            # Pega o conteúdo interno do div e o substitui pelo wrapper
-            inner_content = html_component.find('div')
-            if inner_content:
-                html_component.replace_with(BeautifulSoup(inner_content.decode_contents(), 'html.parser'))
+        # ETAPA 1: CONVERTER LAYOUTS DE COLUNAS E LINHAS EM TABELAS
+        # Esta etapa é executada primeiro para construir a estrutura principal.
+        
+        # Lida com componentes de colunas (lado a lado)
+        for columns_container in soup.find_all(attrs={"data-type": ["two-columns", "three-columns"]}):
+            inner_cols = columns_container.find_all(class_="column", recursive=False)
+            if not inner_cols:
+                continue
 
-        # 2. Remove bordas pontilhadas dos componentes de rows e columns
-        for column in soup.find_all(class_="drop-column"):
-            if 'style' in column.attrs:
-                # Remove a borda pontilhada do estilo
-                style = column['style']
-                style = style.replace('border: 1px dashed #ccc;', '')
-                style = style.replace('border: 1px dashed #ccc', '')
-                column['style'] = style
-
-        # 3. Remove classes e atributos de dados do editor de todos os elementos
-        for tag in soup.find_all(True):
-            if 'class' in tag.attrs:
-                # Remove a classe 'editable-component', 'selected' e 'drop-column'
-                tag['class'] = [c for c in tag['class'] if c not in ['editable-component', 'selected', 'drop-column', 'placeholder-text']]
-                if not tag['class']:
-                    del tag['class'] # Remove o atributo se a lista de classes estiver vazia
+            num_cols = len(inner_cols)
+            col_width = f"{100 / num_cols:.2f}%"
             
-            # Remove os atributos data-*
-            for attr in list(tag.attrs.keys()):
-                if attr.startswith('data-'):
-                    del tag[attr]
+            # Extrai o espaçamento (gap) para converter em padding
+            gap_style = columns_container.get('style', '')
+            gap_match = re.search(r'gap:\s*(\d+)px', gap_style)
+            padding_val = int(gap_match.group(1)) // 2 if gap_match else 10
 
-        return str(soup)
+            # Cria a tabela de layout
+            layout_table = soup.new_tag('table', role="presentation", border="0", cellpadding="0", cellspacing="0", width="100%")
+            tr = soup.new_tag('tr')
+            layout_table.append(tr)
+
+            for i, col_div in enumerate(inner_cols):
+                td = soup.new_tag('td', width=col_width, valign="top")
+                
+                # Simula o 'gap' com 'padding'
+                padding_style = f"padding-left: {padding_val}px; padding-right: {padding_val}px;"
+                # Adiciona padding esquerdo apenas se não for a primeira coluna
+                if i == 0: padding_style = f"padding-right: {padding_val}px;"
+                # Adiciona padding direito apenas se não for a última coluna
+                if i == num_cols -1: padding_style = f"padding-left: {padding_val}px;"
+
+                td['style'] = padding_style
+                
+                # Move o conteúdo da coluna div para a nova célula td
+                td.extend(list(col_div.children))
+                tr.append(td)
+            
+            columns_container.replace_with(layout_table)
+
+        # Lida com componentes de linhas (empilhadas)
+        for rows_container in soup.find_all(attrs={"data-type": ["two-rows", "three-rows"]}):
+            inner_rows = rows_container.find_all(class_="row", recursive=False)
+            if not inner_rows:
+                continue
+            
+            # Cria a tabela de layout
+            layout_table = soup.new_tag('table', role="presentation", border="0", cellpadding="0", cellspacing="0", width="100%")
+
+            for row_div in inner_rows:
+                tr = soup.new_tag('tr')
+                td = soup.new_tag('td', valign="top")
+                
+                # Move o conteúdo da linha div para a nova célula td
+                td.extend(list(row_div.children))
+                tr.append(td)
+                layout_table.append(tr)
+            
+            rows_container.replace_with(layout_table)
+            
+        # ETAPA 2: PROCESSAR COMPONENTES SIMPLES (TEXTO, IMAGEM, BOTÃO, ETC.)
+        # Agora que os layouts são tabelas, processamos o conteúdo dentro deles.
+        # Envolvemos componentes com tamanho/fundo/alinhamento em suas próprias tabelas.
+        
+        # Usamos uma lista para evitar modificar a árvore enquanto iteramos sobre ela
+        components_to_process = soup.find_all('div', class_="editable-component")
+        for component in components_to_process:
+            style_string = component.get('style', '')
+            if not style_string:
+                continue
+
+            styles = {k.strip(): v.strip() for k, v in (s.split(':', 1) for s in style_string.split(';') if ':' in s)}
+            
+            width = styles.get('width')
+            height = styles.get('height')
+            align = styles.get('text-align', 'left')
+            bg_color = styles.get('background-color')
+            padding = styles.get('padding', '5px')
+            border_radius = styles.get('border-radius')
+            font_color = styles.get('color')
+            font_size = styles.get('font-size')
+            font_family = styles.get('font-family')
+            
+            # Cria a tabela para o componente individual
+            wrapper_table = soup.new_tag('table', role="presentation", border="0", cellpadding="0", cellspacing="0")
+            if width and '%' not in width:
+                wrapper_table['width'] = re.sub(r'px$', '', width)
+            else:
+                wrapper_table['width'] = "100%"
+
+            tr = soup.new_tag('tr')
+            td = soup.new_tag('td')
+            wrapper_table.append(tr)
+            tr.append(td)
+
+            # Monta os estilos para o <td>
+            td_styles = []
+            if width: td_styles.append(f"width: {width}")
+            if height: td_styles.append(f"height: {height}")
+            if bg_color: td_styles.append(f"background-color: {bg_color}")
+            if padding: td_styles.append(f"padding: {padding}")
+            if border_radius: td_styles.append(f"border-radius: {border_radius}")
+            if font_color: td_styles.append(f"color: {font_color}")
+            if font_size: td_styles.append(f"font-size: {font_size}")
+            if font_family: td_styles.append(f"font-family: {font_family}")
+
+            td['align'] = align
+            if td_styles:
+                td['style'] = '; '.join(td_styles)
+
+            # Move o conteúdo do div para o td
+            td.extend(list(component.children))
+            component.replace_with(wrapper_table)
+
+        # ETAPA 3: LIMPEZA FINAL
+        # Remove quaisquer classes, atributos e estilos restantes do editor.
+        for tag in soup.find_all(True):
+            # Remove atributos data-* e id
+            attrs_to_remove = [attr for attr in tag.attrs if attr.startswith('data-') or attr == 'id']
+            for attr in attrs_to_remove:
+                del tag[attr]
+
+            # Remove classes do editor
+            if 'class' in tag.attrs:
+                classes_to_keep = [c for c in tag['class'] if c not in [
+                    'editable-component', 'selected', 'drop-column', 'column', 'row',
+                    'placeholder-text', 'drag-over'
+                ]]
+                if classes_to_keep:
+                    tag['class'] = classes_to_keep
+                else:
+                    del tag['class']
+            
+            # Remove estilos restantes do editor
+            if 'style' in tag.attrs:
+                style = tag['style']
+                style = re.sub(r'border:\s*1px\s+dashed\s+[^;]+;?', '', style, flags=re.IGNORECASE).strip()
+                style = re.sub(r'min-height:[^;]+;?', '', style).strip()
+                if style:
+                    tag['style'] = style.strip(';')
+                else:
+                    del tag['style']
+
+        return soup.body.decode_contents() if soup.body else str(soup)
     def open_template(self):
         filepath, _ = QFileDialog.getOpenFileName(self, "Abrir Template", "", "Arquivos HTML (*.html *.htm)")
         if filepath:
