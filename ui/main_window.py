@@ -73,20 +73,15 @@ class MainWindow(QMainWindow):
         file_menu.addSeparator()
         file_menu.addAction(self.exit_action)
 
-    # --- NOVAS FUNÇÕES DE IMPORTAÇÃO/EXPORTAÇÃO ---
-
     def open_project(self):
         """Abre um arquivo de projeto (.mf) que contém o HTML bruto do editor."""
         filepath, _ = QFileDialog.getOpenFileName(self, "Abrir Projeto MailForge", "", "Projetos MailForge (*.mf)")
         if filepath:
             try:
                 with open(filepath, 'r', encoding='utf-8') as f:
-                    # O arquivo .mf contém o HTML bruto, pronto para ser carregado no editor
                     html_content = f.read()
-                
                 self.editor.set_html_content(html_content)
                 QMessageBox.information(self, "Projeto Carregado", "O projeto foi carregado com sucesso e está pronto para edição.")
-                
             except Exception as e:
                 QMessageBox.critical(self, "Erro ao Abrir", f"Não foi possível carregar o projeto: {e}")
 
@@ -96,7 +91,6 @@ class MainWindow(QMainWindow):
         if filepath:
             if not filepath.lower().endswith('.mf'):
                 filepath += '.mf'
-            # Pega o HTML bruto (com todos os dados do editor) e salva diretamente
             self.editor.get_html_content(lambda html: self._write_raw_html_to_file(filepath, html))
 
     def _write_raw_html_to_file(self, filepath, raw_html):
@@ -118,8 +112,6 @@ class MainWindow(QMainWindow):
         """Limpa o HTML e o envolve em um boilerplate padrão antes de salvar."""
         try:
             clean_html = self._clean_html_for_sending(raw_html)
-            
-            # Estrutura final do email
             final_html = f"""<!DOCTYPE html>
 <html>
 <head>
@@ -147,35 +139,31 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Erro ao Exportar", f"Não foi possível exportar o HTML: {e}")
 
-    # --- FUNÇÃO DE LIMPEZA (SEM ALTERAÇÕES) ---
-
-# Em ui/main_window.py, dentro da classe MainWindow
-
-# Em ui/main_window.py, dentro da classe MainWindow
-
-# Em ui/main_window.py, dentro da classe MainWindow
-
-    def _clean_html_for_sending(self, raw_html):
+    
+    def _clean_html_for_sending(self,raw_html):
         """
         Converte o HTML do editor em um formato compatível com email, usando tabelas.
-        Esta versão trata corretamente botões, textos e alinhamentos para máxima compatibilidade.
+        Trata corretamente botões, redes sociais, bordas curvadas e alinhamento de textos.
         """
         if not raw_html:
             return ""
 
         soup = BeautifulSoup(raw_html, 'html.parser')
 
-        # ETAPA 1: CONVERTER LAYOUTS DE COLUNAS/LINHAS EM TABELAS
+        # ETAPA 1: CONVERTER COLUNAS EM TABELAS
         for columns_container in soup.find_all(attrs={"data-type": ["two-columns", "three-columns"]}):
             inner_cols = columns_container.find_all(class_="column", recursive=False)
-            if not inner_cols: continue
+            if not inner_cols:
+                continue
             num_cols = len(inner_cols)
             col_width = f"{100 / num_cols:.2f}%"
             gap_match = re.search(r'gap:\s*(\d+)px', columns_container.get('style', ''))
             padding_val = int(gap_match.group(1)) // 2 if gap_match else 10
+
             layout_table = soup.new_tag('table', role="presentation", border="0", cellpadding="0", cellspacing="0", width="100%")
             tr = soup.new_tag('tr')
             layout_table.append(tr)
+
             for i, col_div in enumerate(inner_cols):
                 td = soup.new_tag('td', width=col_width, valign="top")
                 padding_style = []
@@ -185,117 +173,112 @@ class MainWindow(QMainWindow):
                 td.extend(list(col_div.children))
                 tr.append(td)
             columns_container.replace_with(layout_table)
-        # (Sua lógica para 'rows' aqui)
 
-        # ETAPA 2: PROCESSAR COMPONENTES INDIVIDUAIS
+        # ETAPA 2: CONVERTER COMPONENTES
         for component in soup.find_all(class_="editable-component"):
-            # Se o componente já foi movido para uma célula de tabela, pulamos para evitar reprocessamento.
             if component.find_parent('td'):
                 continue
 
-            # Estilos do <div> principal do componente
-            styles = {k.strip(): v.strip() for k, v in (s.split(':', 1) for s in component.get('style', '').split(';') if ':' in s)}
-            align = component.get('data-align', 'left')
             component_type = component.get('data-type', '')
+            align = component.get('data-align', 'left')
+            styles = {k.strip(): v.strip() for k, v in (s.split(':', 1) for s in component.get('style', '').split(';') if ':' in s)}
 
-            # --- LÓGICA ESPECÍFICA PARA BOTÕES ---
-            if component_type == 'button':
-                a_tag = component.find('a')
-                if not a_tag: continue
-                parent_div_styles = styles
-                a_tag_styles = {k.strip(): v.strip() for k, v in (s.split(':', 1) for s in a_tag.get('style', '').split(';') if ':' in s)}
-                button_table = soup.new_tag('table', role="presentation", border="0", cellpadding="0", cellspacing="0", align=align)
-                tr = soup.new_tag('tr')
-                td = soup.new_tag('td')
-                button_table.append(tr)
-                tr.append(td)
-                bg_color = a_tag_styles.get('background-color', '#3498db')
-                radius = a_tag_styles.get('border-radius', '5px')
-                td['style'] = f"background-color: {bg_color}; border-radius: {radius};"
-                td['bgcolor'] = bg_color
-                final_font_family = parent_div_styles.get('font-family', a_tag_styles.get('font-family', 'Arial, sans-serif'))
-                final_font_size = parent_div_styles.get('font-size', '16px')
-                a_tag['style'] = (
-                    f"padding: {a_tag_styles.get('padding', '12px 25px')}; "
-                    f"font-family: {final_font_family}; "
-                    f"font-size: {final_font_size}; "
-                    f"font-weight: {a_tag_styles.get('font-weight', 'bold')}; "
-                    f"color: {a_tag_styles.get('color', '#ffffff')}; "
-                    "text-decoration: none; display: inline-block;"
-                )
-                td.append(a_tag)
-                component.replace_with(button_table)
-                continue # Pula para o próximo componente
-
-            # --- LÓGICA UNIFICADA PARA TODOS OS OUTROS COMPONENTES ---
             wrapper_table = soup.new_tag('table', role="presentation", border="0", cellpadding="0", cellspacing="0", width="100%")
             tr = soup.new_tag('tr')
             td = soup.new_tag('td')
-            wrapper_table.append(tr)
             tr.append(td)
-            
-            td_styles = []
-            if 'background-color' in styles: td_styles.append(f"background-color: {styles['background-color']}")
-            if styles.get('border-top-left-radius'): td_styles.append(f"border-radius: {styles.get('border-top-left-radius', '0px')} {styles.get('border-top-right-radius', '0px')} {styles.get('border-bottom-right-radius', '0px')} {styles.get('border-bottom-left-radius', '0px')}")
+            wrapper_table.append(tr)
 
-            if component_type == 'text':
-                # --- CORREÇÃO APLICADA AQUI PARA COMPONENTES DE TEXTO ---
-                # Aplica alinhamento (horizontal e vertical) na célula da tabela
-                td['align'] = align
-                td_styles.append(f'text-align: {align};')
-                if align == 'center':
-                    height_str = styles.get('height', 'auto')
-                    if 'px' in height_str: td['height'] = height_str.replace('px', '')
-                    td['valign'] = 'middle'
-                    td_styles.append('vertical-align: middle;')
-                
-                # Localiza o <span> do conteúdo e aplica os estilos de fonte a ele
-                text_content = component.find(class_="text-content")
-                if text_content:
-                    text_style_list = []
-                    if 'font-family' in styles: text_style_list.append(f"font-family: {styles['font-family']}")
-                    if 'font-size' in styles: text_style_list.append(f"font-size: {styles['font-size']}")
-                    if 'color' in styles: text_style_list.append(f"color: {styles['color']}")
-                    
-                    # Aplica os estilos coletados diretamente ao <span>
-                    if text_style_list:
-                        text_content['style'] = '; '.join(text_style_list)
-                
-                td.extend(list(component.children))
+            td['align'] = align
+            td_style = []
+
+            # Preserva alinhamento vertical para centralização real
+            if align == "center":
+                td['valign'] = 'middle'
+                td_style.append("text-align: center; vertical-align: middle;")
             else:
-                # Lógica genérica para outros componentes (imagem, espaçador, etc.)
-                td['align'] = align
-                td_styles.append(f'text-align: {align};')
+                td_style.append(f"text-align: {align};")
+
+            # Copia estilos importantes
+            for prop in ['background-color', 'font-family', 'font-size', 'color', 'height', 'width']:
+                if prop in styles:
+                    td_style.append(f"{prop}: {styles[prop]}")
+
+            # Borda arredondada
+            def extract_border_radius(styles):
+                radius_props = [
+                    'border-radius',
+                    'border-top-left-radius',
+                    'border-top-right-radius',
+                    'border-bottom-left-radius',
+                    'border-bottom-right-radius'
+                ]
+                return [f"{prop}: {styles[prop]}" for prop in radius_props if prop in styles and styles[prop] != '0px']
+
+            td_style.extend(extract_border_radius(styles))
+            td['style'] = '; '.join(td_style)
+
+            if component_type == 'button':
+                a_tag = component.find('a')
+                if not a_tag:
+                    continue
+                a_styles = {k.strip(): v.strip() for k, v in (s.split(':', 1) for s in a_tag.get('style', '').split(';') if ':' in s)}
+
+                # Recompor estilo inline para botão
+                a_tag['style'] = (
+                    f"display: inline-block; text-decoration: none; "
+                    f"padding: {a_styles.get('padding', '12px 25px')}; "
+                    f"font-family: {a_styles.get('font-family', 'Arial, sans-serif')}; "
+                    f"font-size: {a_styles.get('font-size', '16px')}; "
+                    f"font-weight: {a_styles.get('font-weight', 'bold')}; "
+                    f"color: {a_styles.get('color', '#ffffff')}; "
+                    f"background-color: {a_styles.get('background-color', '#3498db')}; "
+                    f"border-radius: {a_styles.get('border-radius', '5px')};"
+                )
+                td.append(a_tag)
+
+            else:
                 td.extend(list(component.children))
 
-            td['style'] = '; '.join(td_styles)
             component.replace_with(wrapper_table)
 
-        # ETAPA 3: LIMPEZA FINAL DO HTML
+        # ETAPA 3: LIMPEZA FINAL
         for tag in soup.find_all(True):
+            # Remover atributos data-* e id
             attrs_to_remove = [attr for attr in tag.attrs if attr.startswith('data-') or attr == 'id']
-            for attr in attrs_to_remove: del tag[attr]
+            for attr in attrs_to_remove:
+                del tag[attr]
+
+            # Limpeza de classes
             if 'class' in tag.attrs:
                 classes_to_keep = [c for c in tag['class'] if c not in ['editable-component', 'selected', 'drop-column', 'column', 'row', 'placeholder-text', 'drag-over', 'text-content']]
-                if classes_to_keep: tag['class'] = classes_to_keep
-                else: del tag['class']
-            
+                if classes_to_keep:
+                    tag['class'] = classes_to_keep
+                else:
+                    del tag['class']
+
+            # Limpeza e preservação de estilo útil
             if 'style' in tag.attrs:
                 style = tag['style']
-                style = re.sub(r'border:\s*[^;]+dashed[^;]+;?', '', style, flags=re.IGNORECASE).strip()
-                style = re.sub(r'min-height:[^;]+;?', '', style, flags=re.IGNORECASE).strip()
-                style = re.sub(r'display:\s*flex;?', '', style, flags=re.IGNORECASE).strip()
-                style = re.sub(r'justify-content:[^;]+;?', '', style, flags=re.IGNORECASE).strip()
-                style = re.sub(r'align-items:[^;]+;?', '', style, flags=re.IGNORECASE).strip()
-                style = re.sub(r'flex-direction:[^;]+;?', '', style, flags=re.IGNORECASE).strip()
-                if style: tag['style'] = style.strip(';').strip()
-                else: del tag['style']
-
+                for pattern in [
+                    r'min-height:[^;]+;?',
+                    r'display:\s*flex;?',
+                    r'justify-content:[^;]+;?',
+                    r'align-items:[^;]+;?',
+                    r'flex-direction:[^;]+;?',
+                    r'border-style:\s*dashed;?'
+                ]:
+                    style = re.sub(pattern, '', style, flags=re.IGNORECASE).strip()
+                tag['style'] = style.strip(';').strip() if style else None
+                if tag['style'] is None:
+                    del tag['style']
         return soup.body.decode_contents() if soup.body else str(soup)
 
+    # --- CORREÇÃO APLICADA AQUI ---
+    @Slot()
     def open_send_dialog(self):
         self.editor.get_html_content(self._get_bg_color_for_send_dialog)
-
+    
     def _get_bg_color_for_send_dialog(self, html):
         if not html.strip():
             QMessageBox.warning(self, "Conteúdo Vazio", "O corpo do email está vazio.")
@@ -306,49 +289,33 @@ class MainWindow(QMainWindow):
             lambda bg_color: self._show_send_dialog_with_html(html, bg_color)
         )
 
-    @Slot(str)
+    # Nota: Este método não precisa ser um slot, pois é chamado diretamente pelo Python.
     def _show_send_dialog_with_html(self, html, bg_color=None):
         if not bg_color or bg_color == "" or bg_color == "transparent":
             bg_color = "#ffffff"
         clean_html = self._clean_html_for_sending(html)
         
-        # Adicionar estilos globais para garantir compatibilidade com clientes de email
         formatted_html = f'''
         <div style="background-color: {bg_color}; padding: 1px;">
             <style type="text/css">
-                /* Estilos para garantir compatibilidade com clientes de email */
                 table[align="center"] {{ margin-left: auto; margin-right: auto; }}
                 table[align="right"] {{ margin-left: auto; }}
                 td[align="center"] {{ text-align: center !important; }}
                 td[align="right"] {{ text-align: right !important; }}
                 td[align="left"] {{ text-align: left !important; }}
-                
-                /* Estilos adicionais para componentes específicos */
                 a {{ text-decoration: none; }}
                 a[href] {{ color: inherit; }}
                 img {{ border: 0; display: block; }}
                 .button {{ display: inline-block; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: inherit; }}
-                /* Garantir que os botões mantenham seu estilo */
                 a[data-type="button"] {{ 
-                    display: inline-block !important; 
-                    padding: 12px 25px !important; 
-                    text-decoration: none !important; 
-                    font-weight: bold !important; 
-                    background-color: #3498db !important; 
-                    color: white !important; 
-                    border-radius: 5px !important; 
-                    text-align: center !important;
-                    mso-padding-alt: 12px 25px !important;
-                    mso-line-height-rule: exactly !important;
+                    display: inline-block !important; padding: 12px 25px !important; text-decoration: none !important; 
+                    font-weight: bold !important; background-color: #3498db !important; color: white !important; 
+                    border-radius: 5px !important; text-align: center !important;
+                    mso-padding-alt: 12px 25px !important; mso-line-height-rule: exactly !important;
                 }}
                 hr {{ border: 0; border-top: 1px solid #ccc; margin: 20px 0; }}
-                
-                /* Estilos para garantir espaçamento correto */
                 .spacer {{ font-size: 1px; line-height: 1px; }}
-                
-                /* Estilos para garantir que as cores de fundo sejam exibidas corretamente */
                 * {{ -webkit-text-size-adjust: none; }}
-                /* Garantir que o tamanho da fonte seja preservado */
                 a, span, p, div {{ font-size: inherit; }}
             </style>
             {clean_html}

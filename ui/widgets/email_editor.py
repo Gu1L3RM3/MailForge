@@ -14,9 +14,12 @@ class Bridge(QObject):
     # Sinais emitidos para a MainWindow
     componentSelected = Signal(dict)
     componentDeselected = Signal()
-    requestImageUpload = Signal(str)  # Sinal para solicitar upload de imagem (recebe o component_id)
-    property_changed = Signal(str, str, object)  # (component_id, property_name, new_value)
+    requestImageUpload = Signal(str)
+    property_changed = Signal(str, str, object)
 
+    # --- CORREÇÃO APLICADA AQUI ---
+    # Adicione o decorador @Slot() aos métodos que são chamados pelo JavaScript.
+    # O argumento 'str' informa ao Qt que este slot espera uma string.
     @Slot(str)
     def on_component_selected(self, props_json):
         props = json.loads(props_json)
@@ -29,6 +32,8 @@ class Bridge(QObject):
     @Slot(str)
     def on_request_image_upload(self, component_id):
         self.requestImageUpload.emit(component_id)
+
+
 
 
 class EmailEditor(QWebEngineView):
